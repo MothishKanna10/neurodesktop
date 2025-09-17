@@ -1,4 +1,4 @@
-FROM quay.io/jupyter/base-notebook:2025-06-30
+FROM quay.io/jupyter/base-notebook:2025-06-16
 # https://quay.io/repository/jupyter/base-notebook?tab=tags
 
 LABEL maintainer="Neurodesk Project <www.neurodesk.org>"
@@ -8,7 +8,7 @@ USER root
 #========================================#
 # Core services
 #========================================#
-
+ 
 
 # Install base image dependencies
 RUN apt-get update --yes \
@@ -153,7 +153,6 @@ RUN apt-get update --yes \
         lxtask \
         man-db \
         nano \
-        nextcloud-client \
         nodejs \
         openssh-client \
         openssh-server \
@@ -241,7 +240,7 @@ COPY config/lmod/module.sh /usr/share/
 COPY ./config/lxde/rc.xml /etc/xdg/openbox
 
 # Allow the root user to access the sshfs mount
-# https://github.com/neurodesk/neurodesk/issues/47
+# https://github.com/NeuroDesk/neurodesk/issues/47
 RUN sed -i 's/#user_allow_other/user_allow_other/g' /etc/fuse.conf
 
 # Fetch singularity bind mount list and create placeholder mountpoints
@@ -265,7 +264,7 @@ COPY --chown=root:users config/jupyter/jupyter_notebook_config.py /etc/jupyter/j
 COPY --chown=root:users config/jupyter/jupyterlab_startup.sh /opt/neurodesktop/jupyterlab_startup.sh
 COPY --chown=root:users config/guacamole/guacamole.sh /opt/neurodesktop/guacamole.sh
 COPY --chown=root:users config/jupyter/environment_variables.sh /opt/neurodesktop/environment_variables.sh
-# COPY --chown=root:users config/guacamole/user-mapping.xml /etc/guacamole/user-mapping.xml
+COPY --chown=root:users config/guacamole/user-mapping.xml /etc/guacamole/user-mapping.xml
 
 RUN chmod +x /etc/jupyter/jupyter_notebook_config.py \
     /opt/neurodesktop/jupyterlab_startup.sh \
@@ -276,11 +275,6 @@ RUN chmod +x /etc/jupyter/jupyter_notebook_config.py \
 RUN mkdir -p /etc/guacamole \
     && echo -e "user-mapping: /etc/guacamole/user-mapping.xml\nguacd-hostname: 127.0.0.1" > /etc/guacamole/guacamole.properties \
     && echo -e "[server]\nbind_host = 127.0.0.1\nbind_port = 4822" > /etc/guacamole/guacd.conf
-RUN chown -R ${NB_UID}:${NB_GID} /etc/guacamole
-RUN chown -R ${NB_UID}:${NB_GID} /usr/local/tomcat
-COPY --chown=${NB_UID}:${NB_GID} config/guacamole/user-mapping-vnc.xml /etc/guacamole/user-mapping-vnc.xml
-COPY --chown=${NB_UID}:${NB_GID} config/guacamole/user-mapping-vnc-rdp.xml /etc/guacamole/user-mapping-vnc-rdp.xml
-RUN ln -sf /etc/guacamole/user-mapping-vnc.xml /etc/guacamole/user-mapping.xml
 
 # Add NB_USER to sudoers
 RUN echo "${NB_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/notebook \
@@ -290,6 +284,17 @@ RUN echo "${NB_USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/notebook \
 
 # Enable deletion of non-empty-directories in JupyterLab: https://github.com/jupyter/notebook/issues/4916
 RUN sed -i 's/c.FileContentsManager.delete_to_trash = False/c.FileContentsManager.always_delete_dir = True/g' /etc/jupyter/jupyter_server_config.py
+
+# Copy script to test_containers 
+COPY config/test_neurodesktop.sh /usr/share/test_neurodesktop.sh
+
+# Install version 1.1.1 of fix_bash.sh that is required for test_containers
+RUN chmod +x /usr/share/test_neurodesktop.sh \
+      && git clone https://github.com/civier/fix_bash.git /tmp/fix_bash \
+      && cd /tmp/fix_bash \
+      && git checkout tags/1.1.1 \
+      && cp /tmp/fix_bash/fix_bash.sh /usr/share \
+      && rm -Rf /tmp/fix_bash
 
 #========================================#
 # Configuration (as notebook user)
@@ -317,6 +322,7 @@ RUN git config --global user.email "user@neurodesk.org" \
 RUN mkdir -p /home/${NB_USER}/.config/matplotlib-mpldir \
     && chmod -R 700 /home/${NB_USER}/.config/matplotlib-mpldir \
     && chown -R ${NB_UID}:${NB_GID} /home/${NB_USER}/.config/matplotlib-mpldir
+
 
 COPY --chown=${NB_UID}:${NB_GID} config/vscode/settings.json /home/${NB_USER}/.config/Code/User/settings.json
 
@@ -366,19 +372,32 @@ COPY config/cvmfs/default.local /etc/cvmfs/default.local
 RUN cp -rp /home/${NB_USER} /tmp/
 
 # Set up data directory so it exists in the container for the SINGULARITY_BINDPATH
-RUN mkdir -p /data /neurodesktop-storage
-RUN chown ${NB_UID}:${NB_GID} /neurodesktop-storage \
-    && chmod 770 /neurodesktop-storage
+RUN mkdir -p /data
 
 # Install neurocommand
 ADD "https://api.github.com/repos/neurodesk/neurocommand/git/refs/heads/main" /tmp/skipcache
 RUN rm /tmp/skipcache \
-    && git clone https://github.com/neurodesk/neurocommand.git /neurocommand \
+    && git clone https://github.com/NeuroDesk/neurocommand.git /neurocommand \
     && cd /neurocommand \
     && bash build.sh --lxde --edit \
     && bash install.sh \
     && ln -s /home/${NB_USER}/neurodesktop-storage/containers /neurocommand/local/containers
 
+# Install Jupyter AI and all model provider integrations
+RUN /opt/conda/bin/pip install --no-cache-dir \
+    jupyterlab \
+    jupyter-ai \
+    "jupyter-ai[openai]" \
+    "jupyter-ai[anthropic]" \
+    "jupyter-ai[huggingface]" \
+    "jupyter-ai[cohere]" \
+    "jupyter-ai[voyageai]" \
+    && rm -rf /home/${NB_USER}/.cache
+
+# Build the JupyterLab frontend extensions (full build, no memory restrictions)
+RUN /opt/conda/bin/jupyter lab build --dev-build=True --minimize=True
+
+# Switch back to notebook user
 USER ${NB_UID}
 
 WORKDIR "${HOME}"
@@ -386,4 +405,4 @@ WORKDIR "${HOME}"
 # Install example notebooks
 ADD "https://api.github.com/repos/neurodesk/example-notebooks/git/refs/heads/main" /home/${NB_USER}/skipcache
 RUN rm /home/${NB_USER}/skipcache \
-    && git clone --depth 1 https://github.com/neurodesk/example-notebooks
+    && git clone --depth 1 https://github.com/NeuroDesk/example-notebooks
