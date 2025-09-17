@@ -375,13 +375,13 @@ RUN cp -rp /home/${NB_USER} /tmp/
 RUN mkdir -p /data
 
 # Install neurocommand
-ADD "https://api.github.com/repos/neurodesk/neurocommand/git/refs/heads/main" /tmp/skipcache
-RUN rm /tmp/skipcache \
-    && git clone https://github.com/NeuroDesk/neurocommand.git /neurocommand \
-    && cd /neurocommand \
-    && bash build.sh --lxde --edit \
-    && bash install.sh \
-    && ln -s /home/${NB_USER}/neurodesktop-storage/containers /neurocommand/local/containers
+# ADD "https://api.github.com/repos/neurodesk/neurocommand/git/refs/heads/main" /tmp/skipcache
+# RUN rm /tmp/skipcache \
+#     && git clone https://github.com/NeuroDesk/neurocommand.git /neurocommand \
+#     && cd /neurocommand \
+#     && bash build.sh --lxde --edit \
+#     && bash install.sh \
+#     && ln -s /home/${NB_USER}/neurodesktop-storage/containers /neurocommand/local/containers
 
 # Install Jupyter AI and all model provider integrations
 RUN /opt/conda/bin/pip install --no-cache-dir \
@@ -395,7 +395,7 @@ RUN /opt/conda/bin/pip install --no-cache-dir \
     && rm -rf /home/${NB_USER}/.cache
 
 # Build the JupyterLab frontend extensions (full build, no memory restrictions)
-RUN /opt/conda/bin/jupyter lab build --dev-build=True --minimize=True
+# RUN /opt/conda/bin/jupyter lab build --dev-build=False --minimize=False
 
 # Switch back to notebook user
 USER ${NB_UID}
