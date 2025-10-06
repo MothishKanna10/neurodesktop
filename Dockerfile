@@ -388,14 +388,10 @@ RUN /opt/conda/bin/pip install --no-cache-dir \
     jupyterlab \
     jupyter-ai \
     "jupyter-ai[openai]" \
-    "jupyter-ai[anthropic]" \
-    "jupyter-ai[huggingface]" \
-    "jupyter-ai[cohere]" \
-    "jupyter-ai[voyageai]" \
+    "jupyter-ai-magics" \
+    langchain-openai \
     && rm -rf /home/${NB_USER}/.cache
 
-# Build the JupyterLab frontend extensions (full build, no memory restrictions)
-# RUN /opt/conda/bin/jupyter lab build --dev-build=False --minimize=False
 
 # Switch back to notebook user
 USER ${NB_UID}
